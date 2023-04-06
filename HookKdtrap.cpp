@@ -587,10 +587,10 @@ extern"C" u64 FindExceptionRecord()
 	u64 ExceptionRecord = 0;
 
 	u64 CorruptContext = 0, CorruptR12 = 0;
-	if (GetWinver() > 18363)
-	{
-		CorruptContext = GetR13();
-	}
+	//if (GetWinver() > 18363)
+	//{
+	CorruptContext = GetR13();
+	//}
 
 	bool bFoundExceptionRecord = false;
 	bool bFoundCorruptReg = false;
@@ -614,16 +614,19 @@ extern"C" u64 FindExceptionRecord()
 					}
 					else
 					{
-						if ((*(u64*)((u64)stack_current - 3 * 8) & ~0xFF) != CorruptContext)
+						if (CorruptContext)
 						{
-							//something went wrong
-							BpMe(__LINE__);
-							return FALSE;
-							//__fastfail(0);
-						}
+							if ((*(u64*)((u64)stack_current - 3 * 8) & ~0xFF) != CorruptContext)
+							{
+								//something went wrong
+								BpMe(__LINE__);
+								return FALSE;
+								//__fastfail(0);
+							}
 
-						//r13
-						CorruptContext = *(u64*)((u64)stack_current - 3 * 8);
+							//r13
+							CorruptContext = *(u64*)((u64)stack_current - 3 * 8);
+						}
 
 						//mov [rsp+10h], rbp
 						auto OrigIrql = *(u64*)((u64)stack_current + 0x10);
@@ -650,6 +653,14 @@ extern"C" u64 FindExceptionRecord()
 					if (!ExceptionRecord)
 						BpMe(__LINE__);
 					bFoundExceptionRecord = true;
+
+					if (!CorruptContext)
+					{
+						BpMe(__LINE__);
+
+						// Context from rsi in KiDispatchException
+						CorruptContext = *(u64*)((u64)stack_current + 3 * 8);
+					}
 				}
 				return FALSE;
 			}
@@ -658,15 +669,16 @@ extern"C" u64 FindExceptionRecord()
 
 		}, _AddressOfReturnAddress(), true);
 
-	if (!traceResult)
+	if (!traceResult || !CorruptContext)
 	{
 		BpMe(__LINE__);
+		KeBugCheck(0);
 	}
 
-	if (GetWinver() > 18363)
-	{
-		SetR13(CorruptContext);
-	}
+	//if (GetWinver() > 18363)
+	//{
+	SetR13(CorruptContext);
+	//}
 
 	SetR12(CorruptR12);
 
